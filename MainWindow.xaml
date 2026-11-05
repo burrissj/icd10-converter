@@ -1,0 +1,417 @@
+<Window x:Class="ICD10Converter.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="ICD-10 Converter" Width="1000" Height="780" MinWidth="860" MinHeight="640"
+        WindowStartupLocation="CenterScreen" Background="{StaticResource BgBrush}"
+        FontFamily="Segoe UI" UseLayoutRounding="True" TextOptions.TextFormattingMode="Display">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Border Background="#0F172A" Padding="24,16">
+            <StackPanel>
+                <TextBlock Text="ICD-10 Converter" FontSize="21" FontWeight="SemiBold" Foreground="White"/>
+                <TextBlock Text="Convert CMS ICD-10-CM files to JSON, download releases, and compare versions"
+                           FontSize="12.5" Foreground="#94A3B8" Margin="0,2,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <TabControl Grid.Row="1" Margin="20,12,20,16" x:Name="tabs" SelectionChanged="OnTabChanged">
+
+            <!-- ============ CONVERT ============ -->
+            <TabItem Header="Convert">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <Border Grid.Row="0" Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Text="SOURCE FILES" Style="{StaticResource CardTitle}"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="130"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Codes / order file" Style="{StaticResource Lbl}"/>
+                                <TextBox Grid.Column="1" x:Name="txtInput" AllowDrop="True"
+                                         PreviewDragOver="OnDragOver" Drop="OnInputDrop"
+                                         ToolTip="Type, paste, or drop a file here"/>
+                                <Button Grid.Column="2" Content="Browse..." Margin="8,0,0,0" Click="OnBrowseInput"/>
+                                <Button Grid.Column="3" x:Name="btnDownload" Content="Download from CMS" Margin="8,0,0,0"
+                                        Click="OnDownload"
+                                        ToolTip="Download the sources configured on the Settings tab"/>
+                            </Grid>
+                            <StackPanel Orientation="Horizontal" Margin="130,10,0,0">
+                                <RadioButton x:Name="rbAuto" Content="Auto-detect" IsChecked="True" Margin="0,0,22,0"/>
+                                <RadioButton x:Name="rbCodes" Content="Codes file" Margin="0,0,22,0"/>
+                                <RadioButton x:Name="rbOrder" Content="Order file"/>
+                            </StackPanel>
+                            <Grid Margin="0,12,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="130"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Addenda (optional)" Style="{StaticResource Lbl}"/>
+                                <TextBox Grid.Column="1" x:Name="txtAddenda"/>
+                                <Button Grid.Column="2" Content="Browse..." Margin="8,0,0,0" Click="OnBrowseAddenda"/>
+                                <Button Grid.Column="3" Content="Clear" Margin="8,0,0,0" Click="OnClearAddenda"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Row="1" Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Text="OUTPUT" Style="{StaticResource CardTitle}"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="130"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Output file" Style="{StaticResource Lbl}"/>
+                                <TextBox Grid.Column="1" x:Name="txtOutput"/>
+                                <Button Grid.Column="2" Content="Browse..." Margin="8,0,0,0" Click="OnBrowseOutput"/>
+                            </Grid>
+                            <CheckBox x:Name="chkPretty" Content="Pretty-print JSON (indented, easier to read, larger file)"
+                                      IsChecked="True" Margin="130,10,0,0"/>
+                            <StackPanel Orientation="Horizontal" Margin="130,10,0,0">
+                                <CheckBox x:Name="chkSplit" Content="Split into parts under" VerticalAlignment="Center"
+                                          Checked="OnSplitToggled" Unchecked="OnSplitToggled"/>
+                                <TextBox x:Name="txtMax" Width="110" Margin="10,0,6,0" Text="3670016" IsEnabled="False"/>
+                                <TextBlock Text="bytes" Style="{StaticResource Lbl}" Margin="0,0,14,0"/>
+                                <Button Content="4 MB" Tag="4194304" Click="OnPreset" Padding="10,5" Margin="0,0,4,0"/>
+                                <Button Content="3.5 MB" Tag="3670016" Click="OnPreset" Padding="10,5" Margin="0,0,4,0"/>
+                                <Button Content="2 MB" Tag="2097152" Click="OnPreset" Padding="10,5" Margin="0,0,4,0"/>
+                                <Button Content="1 MB" Tag="1048576" Click="OnPreset" Padding="10,5"/>
+                            </StackPanel>
+                            <TextBlock Style="{StaticResource Hint}" Margin="130,6,0,0"
+                                       Text="Each part is measured on the real file, so it never exceeds the limit. Categories stay together."/>
+                        </StackPanel>
+                    </Border>
+
+                    <Grid Grid.Row="2" Margin="0,2,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Button Style="{StaticResource Primary}" x:Name="btnConvert" Content="Convert" Width="150" Click="OnConvert"/>
+                        <Button Grid.Column="1" Content="Clear all" Margin="8,0,0,0" Click="OnClearAll"/>
+                        <StackPanel Grid.Column="2" Margin="18,0,0,0" VerticalAlignment="Center">
+                            <TextBlock x:Name="txtStatus" Style="{StaticResource Hint}" Margin="0,0,0,4"/>
+                            <ProgressBar x:Name="progress" Visibility="Hidden"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <Border Grid.Row="3" Style="{StaticResource Card}" Margin="0" Padding="0">
+                        <TextBox x:Name="txtLog" IsReadOnly="True" VerticalScrollBarVisibility="Auto"
+                                 TextWrapping="Wrap" FontFamily="Consolas" FontSize="12" BorderThickness="0"
+                                 Background="Transparent" Padding="12,10"/>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <!-- ============ COMPARE ============ -->
+            <TabItem Header="Compare versions" x:Name="tabCompare">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <Border Grid.Row="0" Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Text="VERSIONS TO COMPARE" Style="{StaticResource CardTitle}"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="90"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="170"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Older" Style="{StaticResource Lbl}" FontWeight="SemiBold"/>
+                                <TextBox Grid.Column="1" x:Name="txtOld" AllowDrop="True" PreviewDragOver="OnDragOver" Drop="OnCompareDrop"/>
+                                <Button Grid.Column="2" Content="File(s)..." Tag="old" Margin="8,0,0,0" Click="OnPickFiles"/>
+                                <Button Grid.Column="3" Content="Folder..." Tag="old" Margin="6,0,0,0" Click="OnPickFolder"/>
+                                <ComboBox Grid.Column="4" x:Name="cmbOld" Margin="8,0,0,0" Tag="old" SelectionChanged="OnHistoryPicked"/>
+                            </Grid>
+                            <Grid Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="90"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="170"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Newer" Style="{StaticResource Lbl}" FontWeight="SemiBold"/>
+                                <TextBox Grid.Column="1" x:Name="txtNew" AllowDrop="True" PreviewDragOver="OnDragOver" Drop="OnCompareDrop"/>
+                                <Button Grid.Column="2" Content="File(s)..." Tag="new" Margin="8,0,0,0" Click="OnPickFiles"/>
+                                <Button Grid.Column="3" Content="Folder..." Tag="new" Margin="6,0,0,0" Click="OnPickFolder"/>
+                                <ComboBox Grid.Column="4" x:Name="cmbNew" Margin="8,0,0,0" Tag="new" SelectionChanged="OnHistoryPicked"/>
+                            </Grid>
+                            <TextBlock Style="{StaticResource Hint}" Margin="90,8,0,0"
+                                       Text="Accepts converted .json files (or a folder of split parts), or CMS .txt codes / order files. Every conversion is also saved and appears in the 'Saved history' dropdown."/>
+                            <StackPanel Orientation="Horizontal" Margin="90,12,0,0">
+                                <Button Style="{StaticResource Primary}" x:Name="btnCompare" Content="Compare" Width="150" Click="OnCompare"/>
+                                <Button Content="Swap" Margin="8,0,0,0" Click="OnSwap"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <Grid Grid.Row="1" Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <CheckBox x:Name="chkAdded" Content="Added" IsChecked="True" Margin="0,0,14,0" Foreground="#15803D" FontWeight="SemiBold" Checked="OnFilterChanged" Unchecked="OnFilterChanged"/>
+                            <CheckBox x:Name="chkRemoved" Content="Removed" IsChecked="True" Margin="0,0,14,0" Foreground="#B91C1C" FontWeight="SemiBold" Checked="OnFilterChanged" Unchecked="OnFilterChanged"/>
+                            <CheckBox x:Name="chkChanged" Content="Changed" IsChecked="True" Margin="0,0,14,0" Foreground="#B45309" FontWeight="SemiBold" Checked="OnFilterChanged" Unchecked="OnFilterChanged"/>
+                        </StackPanel>
+                        <TextBox Grid.Column="1" x:Name="txtSearch" Margin="8,0,8,0" TextChanged="OnFilterChanged"
+                                 ToolTip="Filter by code or description"/>
+                        <Button Grid.Column="2" Content="Export CSV..." Click="OnExportCsv"/>
+                    </Grid>
+
+                    <Border Grid.Row="2" Style="{StaticResource Card}" Margin="0" Padding="0">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <DataGrid x:Name="dgDiff" IsReadOnly="True" BorderThickness="0">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="90">
+                                        <DataGridTextColumn.ElementStyle>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="FontWeight" Value="SemiBold"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Status}" Value="Added"><Setter Property="Foreground" Value="#15803D"/></DataTrigger>
+                                                    <DataTrigger Binding="{Binding Status}" Value="Removed"><Setter Property="Foreground" Value="#B91C1C"/></DataTrigger>
+                                                    <DataTrigger Binding="{Binding Status}" Value="Changed"><Setter Property="Foreground" Value="#B45309"/></DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </DataGridTextColumn.ElementStyle>
+                                    </DataGridTextColumn>
+                                    <DataGridTextColumn Header="Code" Binding="{Binding Code}" Width="90"/>
+                                    <DataGridTextColumn Header="Older description" Binding="{Binding OldDescription}" Width="*">
+                                        <DataGridTextColumn.ElementStyle>
+                                            <Style TargetType="TextBlock"><Setter Property="TextWrapping" Value="Wrap"/></Style>
+                                        </DataGridTextColumn.ElementStyle>
+                                    </DataGridTextColumn>
+                                    <DataGridTextColumn Header="Newer description" Binding="{Binding NewDescription}" Width="*">
+                                        <DataGridTextColumn.ElementStyle>
+                                            <Style TargetType="TextBlock"><Setter Property="TextWrapping" Value="Wrap"/></Style>
+                                        </DataGridTextColumn.ElementStyle>
+                                    </DataGridTextColumn>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                            <Border Grid.Row="1" Background="#F8FAFC" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Padding="14,8">
+                                <TextBlock x:Name="txtSummary" Style="{StaticResource Lbl}" Text="Pick two versions and click Compare."/>
+                            </Border>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <!-- ============ FDA MEDICATIONS ============ -->
+            <TabItem Header="FDA medications" x:Name="tabFda">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <Border Grid.Row="0" Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Text="OPENFDA DATA SOURCE" Style="{StaticResource CardTitle}"/>
+                            <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,10"
+                                       Text="Fetches medication names and ingredients from the free OpenFDA API (no account needed), in batches of 1,000. Endpoint URLs can be edited on the Settings tab."/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="150"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="API endpoint" Style="{StaticResource Lbl}"/>
+                                <ComboBox Grid.Column="1" x:Name="cmbFdaEndpoint" DisplayMemberPath="Name" HorizontalAlignment="Left" Width="360"/>
+                            </Grid>
+                            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                <TextBlock Text="Number of medications" Style="{StaticResource Lbl}" Width="150"/>
+                                <TextBox x:Name="txtFdaCount" Width="110"/>
+                                <TextBlock Style="{StaticResource Hint}" Margin="12,0,0,0" VerticalAlignment="Center"
+                                           Text="OpenFDA allows paging up to about 26,000 records per endpoint."/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Row="1" Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Text="OUTPUT" Style="{StaticResource CardTitle}"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="150"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Output folder" Style="{StaticResource Lbl}"/>
+                                <TextBox Grid.Column="1" x:Name="txtFdaFolder"/>
+                                <Button Grid.Column="2" Content="Browse..." Margin="8,0,0,0" Click="OnFdaBrowse"/>
+                            </Grid>
+                            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                <TextBlock Text="Medications per file" Style="{StaticResource Lbl}" Width="150"/>
+                                <TextBox x:Name="txtFdaPerFile" Width="110"/>
+                            </StackPanel>
+                            <CheckBox x:Name="chkFdaDupes" Margin="150,10,0,0" Content="Remove duplicate medications (by generic name)"/>
+                            <CheckBox x:Name="chkFdaDebug" Margin="150,8,0,0" Content="Debug mode: dump the first raw API result to the log"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Grid Grid.Row="2" Margin="0,2,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Button Style="{StaticResource Primary}" x:Name="btnFdaFetch" Content="Fetch &amp; process" Width="170" Click="OnFdaFetch"/>
+                        <Button Grid.Column="1" x:Name="btnFdaStop" Content="Stop" Margin="8,0,0,0" IsEnabled="False" Click="OnFdaStop"
+                                ToolTip="Stops fetching and writes what has been collected so far"/>
+                        <Button Grid.Column="2" Content="Open folder" Margin="8,0,0,0" Click="OnFdaOpenFolder"/>
+                        <StackPanel Grid.Column="3" Margin="18,0,0,0" VerticalAlignment="Center">
+                            <TextBlock x:Name="txtFdaProgress" Style="{StaticResource Hint}" Margin="0,0,0,4" Text="Ready"/>
+                            <ProgressBar x:Name="fdaProgress" Minimum="0" Maximum="100" Height="8"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <Border Grid.Row="3" Style="{StaticResource Card}" Margin="0" Padding="0">
+                        <TextBox x:Name="txtFdaLog" IsReadOnly="True" VerticalScrollBarVisibility="Auto"
+                                 TextWrapping="Wrap" FontFamily="Consolas" FontSize="12" BorderThickness="0"
+                                 Background="Transparent" Padding="12,10"/>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <!-- ============ SETTINGS ============ -->
+            <TabItem Header="Settings" x:Name="tabSettings">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="DOWNLOAD SOURCES" Style="{StaticResource CardTitle}"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="130"/>
+                                        <ColumnDefinition Width="130"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Release year" Style="{StaticResource Lbl}"/>
+                                    <TextBox Grid.Column="1" x:Name="txtYear" Text="2026"/>
+                                    <TextBlock Grid.Column="2" Style="{StaticResource Hint}" Margin="12,0,0,0" VerticalAlignment="Center"
+                                               Text="Replaces {year} in the URLs and file names below."/>
+                                </Grid>
+                                <Grid Margin="0,10,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="130"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Download folder" Style="{StaticResource Lbl}"/>
+                                    <TextBox Grid.Column="1" x:Name="txtDlFolder" ToolTip="Leave blank to be asked each time"/>
+                                    <Button Grid.Column="2" Content="Browse..." Margin="8,0,0,0" Click="OnBrowseDlFolder"/>
+                                    <Button Grid.Column="3" Content="Ask each time" Margin="8,0,0,0" Click="OnClearDlFolder"/>
+                                </Grid>
+                                <DataGrid x:Name="dgSources" Margin="0,14,0,0" Height="170" MinRowHeight="32"
+                                          CanUserDeleteRows="False" SelectionMode="Single">
+                                    <DataGrid.Columns>
+                                        <DataGridCheckBoxColumn Header="On" Binding="{Binding Enabled}" Width="46"/>
+                                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="230"/>
+                                        <DataGridTextColumn Header="URL (use {year})" Binding="{Binding Url}" Width="*"/>
+                                        <DataGridTextColumn Header="Save as" Binding="{Binding FileName}" Width="210"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                    <Button Content="Add source" Click="OnAddSource"/>
+                                    <Button Content="Remove selected" Margin="8,0,0,0" Click="OnRemoveSource"/>
+                                    <Button Content="Reset to CMS defaults" Margin="8,0,0,0" Click="OnResetSources"/>
+                                </StackPanel>
+                                <TextBlock Style="{StaticResource Hint}" Margin="0,8,0,0"
+                                           Text="ZIP files are extracted into a icd10cm-&lt;year&gt; subfolder and then deleted. Any http(s) URL works, so you can point at a mirror or an older release."/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="OPENFDA ENDPOINTS" Style="{StaticResource CardTitle}"/>
+                                <DataGrid x:Name="dgFda" Height="130" MinRowHeight="32" CanUserDeleteRows="False" SelectionMode="Single">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="230"/>
+                                        <DataGridTextColumn Header="URL (without limit/skip)" Binding="{Binding Url}" Width="*"/>
+                                        <DataGridComboBoxColumn x:Name="colFdaFormat" Header="Response format" SelectedItemBinding="{Binding Format}" Width="130"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                    <Button Content="Add endpoint" Click="OnAddFda"/>
+                                    <Button Content="Remove selected" Margin="8,0,0,0" Click="OnRemoveFda"/>
+                                    <Button Content="Reset to defaults" Margin="8,0,0,0" Click="OnResetFda"/>
+                                </StackPanel>
+                                <TextBlock Style="{StaticResource Hint}" Margin="0,8,0,0"
+                                           Text="Format 'ndc' reads flat records (brand_name, generic_name, active_ingredients). Format 'drugsfda' reads records that contain a products list. Pick whichever matches the URL's response."/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="CONVERSION DEFAULTS" Style="{StaticResource CardTitle}"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="130"/>
+                                        <ColumnDefinition Width="200"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Version label" Style="{StaticResource Lbl}"/>
+                                    <TextBox Grid.Column="1" x:Name="txtVersion"/>
+                                    <TextBlock Grid.Column="2" Style="{StaticResource Hint}" Margin="12,0,0,0" VerticalAlignment="Center"
+                                               Text="Written to VersionDescription in the JSON. Blank = v&lt;year&gt;."/>
+                                </Grid>
+                                <CheckBox x:Name="chkDefPretty" Content="Pretty-print JSON by default" Margin="0,12,0,0"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                    <CheckBox x:Name="chkDefSplit" Content="Split large files by default, max" VerticalAlignment="Center"/>
+                                    <TextBox x:Name="txtDefMax" Width="110" Margin="10,0,6,0"/>
+                                    <TextBlock Text="bytes" Style="{StaticResource Lbl}"/>
+                                </StackPanel>
+                                <CheckBox x:Name="chkKeepHistory" Margin="0,10,0,0"
+                                          Content="Save a snapshot of every conversion so it can be compared later"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                    <Button Content="Open history folder" Click="OnOpenHistory"/>
+                                    <Button Content="Open settings folder" Margin="8,0,0,0" Click="OnOpenSettingsFolder"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <Button Style="{StaticResource Primary}" Content="Save settings" Width="150" Click="OnSaveSettings"/>
+                            <TextBlock x:Name="txtSettingsStatus" Style="{StaticResource Lbl}" Margin="14,0,0,0" Foreground="#15803D"/>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</Window>
