@@ -24,6 +24,8 @@ public partial class MainWindow : Window
     readonly ObservableCollection<DownloadSource> sources = new();
     readonly ObservableCollection<FdaEndpoint> fdaEndpoints = new();
     CancellationTokenSource? fdaCts;
+    string? lastReportPath;
+    ValidationReport? shownReport;
     ICollectionView? diffView;
     DiffResult? lastDiff;
     bool busy;
@@ -166,7 +168,7 @@ public partial class MainWindow : Window
 
         var kind = rbCodes.IsChecked == true ? FileKind.Codes : rbOrder.IsChecked == true ? FileKind.Order : FileKind.Auto;
         var opts = new ConvertOptions(input, addenda.Length > 0 ? addenda : null, output, kind,
-            chkPretty.IsChecked == true, split, maxBytes, settings.EffectiveVersion, settings.KeepHistory);
+            chkPretty.IsChecked == true, split, maxBytes, settings.EffectiveVersion, settings.KeepHistory, settings.WriteReports);
 
         SetBusy(true, "Converting...");
         Log("=== Starting conversion ===");
@@ -177,10 +179,18 @@ public partial class MainWindow : Window
             Log($"=== Conversion complete in {result.Elapsed.TotalSeconds:0.0} s ===");
             RefreshHistory();
 
-            string msg = result.IsFolder
-                ? $"Conversion completed in {result.Elapsed.TotalSeconds:0.0} s.\n\n{result.CodeCount:N0} codes were split into {result.Parts} files.\n\nOpen the folder?"
-                : $"Conversion completed in {result.Elapsed.TotalSeconds:0.0} s.\n\n{result.CodeCount:N0} codes saved to:\n{result.OpenPath}\n\nOpen the folder?";
-            if (MessageBox.Show(this, msg, "Success", MessageBoxButton.YesNo, MessageBoxImage.Information) == MessageBoxResult.Yes)
+            lastReportPath = result.ReportPath;
+            btnOpenReport.IsEnabled = lastReportPath != null;
+            ShowReport(result.Report);
+
+            string msg = (result.IsFolder
+                ? $"Conversion completed in {result.Elapsed.TotalSeconds:0.0} s.\n\n{result.CodeCount:N0} codes were split into {result.Parts} files."
+                : $"Conversion completed in {result.Elapsed.TotalSeconds:0.0} s.\n\n{result.CodeCount:N0} codes saved to:\n{result.OpenPath}")
+                + $"\n\nValidation: {result.Report.Headline}"
+                + (result.Report.Passed ? "" : "\nThe output has problems. Open the validation report before using it.")
+                + "\n\nOpen the folder?";
+            if (MessageBox.Show(this, msg, result.Report.Passed ? "Success" : "Completed with problems", MessageBoxButton.YesNo,
+                    result.Report.Passed ? MessageBoxImage.Information : MessageBoxImage.Warning) == MessageBoxResult.Yes)
                 OpenInExplorer(result.OpenPath, !result.IsFolder);
         }
         catch (Exception ex)
@@ -259,6 +269,72 @@ public partial class MainWindow : Window
             MessageBox.Show(this, ex.Message, "Download error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally { SetBusy(false); }
+    }
+
+    void OnOpenReport(object sender, RoutedEventArgs e)
+    {
+        if (lastReportPath != null && File.Exists(lastReportPath))
+            Process.Start(new ProcessStartInfo(lastReportPath) { UseShellExecute = true });
+        else Warn("The report file isn't there any more. Convert again to regenerate it.");
+    }
+
+    // ------------------------------------------------------------------ validate tab
+
+    void ShowReport(ValidationReport report)
+    {
+        shownReport = report;
+        txtValReport.Text = report.ToText();
+        txtValHeadline.Text = report.Headline;
+        txtValHeadline.Foreground = report.Errors > 0 ? System.Windows.Media.Brushes.Firebrick
+            : report.Warnings > 0 ? System.Windows.Media.Brushes.DarkOrange
+            : System.Windows.Media.Brushes.SeaGreen;
+    }
+
+    void OnValPickFiles(object sender, RoutedEventArgs e)
+    {
+        var dlg = new OpenFileDialog { Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*", Title = "Select file(s) to validate", Multiselect = true };
+        if (dlg.ShowDialog(this) == true) txtValPath.Text = string.Join(";", dlg.FileNames);
+    }
+
+    void OnValPickFolder(object sender, RoutedEventArgs e)
+    {
+        var dlg = new OpenFolderDialog { Title = "Select a folder of generated JSON files" };
+        if (dlg.ShowDialog(this) == true) txtValPath.Text = dlg.FolderName;
+    }
+
+    async void OnValidate(object sender, RoutedEventArgs e)
+    {
+        var spec = txtValPath.Text.Trim().Trim('"');
+        if (spec.Length == 0) { Warn("Choose the JSON file(s) or folder to validate."); return; }
+
+        btnValidate.IsEnabled = false;
+        Mouse.OverrideCursor = Cursors.Wait;
+        txtValHeadline.Text = "Validating...";
+        txtValHeadline.Foreground = System.Windows.Media.Brushes.Gray;
+        try
+        {
+            var report = await Task.Run(() => Validator.Run(spec));
+            ShowReport(report);
+        }
+        catch (Exception ex)
+        {
+            txtValHeadline.Text = "Validation could not run.";
+            MessageBox.Show(this, ex.Message, "Validate failed", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            btnValidate.IsEnabled = true;
+            Mouse.OverrideCursor = null;
+        }
+    }
+
+    void OnValSave(object sender, RoutedEventArgs e)
+    {
+        if (shownReport == null) { Warn("Run a validation first."); return; }
+        var dlg = new SaveFileDialog { Filter = "Text files (*.txt)|*.txt", DefaultExt = ".txt", FileName = "validation-report.txt" };
+        if (dlg.ShowDialog(this) != true) return;
+        try { shownReport.Save(dlg.FileName); OpenInExplorer(dlg.FileName, true); }
+        catch (Exception ex) { MessageBox.Show(this, ex.Message, "Could not save report", MessageBoxButton.OK, MessageBoxImage.Error); }
     }
 
     // ------------------------------------------------------------------ compare tab
@@ -510,7 +586,7 @@ public partial class MainWindow : Window
         try { settings.Save(); } catch { /* remembering the choices is a convenience only */ }
 
         var opts = new FdaOptions(ep, settings.FdaRecordCount, settings.FdaPerFile,
-            settings.FdaRemoveDuplicates, chkFdaDebug.IsChecked == true, settings.FdaOutputFolder);
+            settings.FdaRemoveDuplicates, chkFdaDebug.IsChecked == true, settings.FdaOutputFolder, settings.WriteReports);
 
         btnFdaFetch.IsEnabled = false;
         btnFdaStop.IsEnabled = true;
@@ -535,11 +611,16 @@ public partial class MainWindow : Window
                     "No medications collected.\n\nTip: enable Debug mode and run again. The log will show the raw field names the API returns, and you can check the endpoint's response format on the Settings tab.",
                     "Nothing collected", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
-            else if (MessageBox.Show(this,
-                         $"{(r.Stopped ? "Stopped early. " : "")}Done!\n\nMedications: {r.Medications:N0}\nFiles created: {r.Files}\nOutput folder: {r.Folder}\n\nOpen the folder?",
-                         "Success", MessageBoxButton.YesNo, MessageBoxImage.Information) == MessageBoxResult.Yes)
+            else
             {
-                OpenInExplorer(r.Folder, false);
+                if (r.Report != null) ShowReport(r.Report);
+                string check = r.Report == null ? "" : $"\n\nValidation: {r.Report.Headline}";
+                bool ok = r.Report?.Passed != false;
+                if (MessageBox.Show(this,
+                        $"{(r.Stopped ? "Stopped early. " : "")}Done!\n\nMedications: {r.Medications:N0}\nFiles created: {r.Files}\nOutput folder: {r.Folder}{check}\n\nOpen the folder?",
+                        ok ? "Success" : "Completed with problems", MessageBoxButton.YesNo,
+                        ok ? MessageBoxImage.Information : MessageBoxImage.Warning) == MessageBoxResult.Yes)
+                    OpenInExplorer(r.Folder, false);
             }
         }
         catch (Exception ex)
@@ -591,6 +672,7 @@ public partial class MainWindow : Window
         chkDefSplit.IsChecked = settings.SplitEnabled;
         txtDefMax.Text = settings.MaxSizeBytes.ToString();
         chkKeepHistory.IsChecked = settings.KeepHistory;
+        chkWriteReports.IsChecked = settings.WriteReports;
 
         sources.Clear();
         foreach (var s in settings.Sources)
@@ -645,6 +727,7 @@ public partial class MainWindow : Window
         settings.SplitEnabled = chkDefSplit.IsChecked == true;
         settings.MaxSizeBytes = max;
         settings.KeepHistory = chkKeepHistory.IsChecked == true;
+        settings.WriteReports = chkWriteReports.IsChecked == true;
         settings.Sources = sources
             .Select(s => new DownloadSource { Enabled = s.Enabled, Name = s.Name.Trim(), Url = s.Url.Trim(), FileName = s.FileName.Trim() })
             .ToList();

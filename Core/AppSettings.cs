@@ -42,6 +42,7 @@ public sealed class AppSettings
     public bool SplitEnabled { get; set; } = false;
     public long MaxSizeBytes { get; set; } = 3_670_016;
     public bool KeepHistory { get; set; } = true;
+    public bool WriteReports { get; set; } = true;
     public List<DownloadSource> Sources { get; set; } = DefaultSources();
 
     // --- OpenFDA medications tab ---

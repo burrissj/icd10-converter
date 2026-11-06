@@ -24,9 +24,11 @@ public sealed class MedicationsFile
 }
 
 public sealed record FdaOptions(
-    FdaEndpoint Endpoint, int RecordCount, int PerFile, bool RemoveDuplicates, bool Debug, string OutputFolder);
+    FdaEndpoint Endpoint, int RecordCount, int PerFile, bool RemoveDuplicates, bool Debug, string OutputFolder,
+    bool WriteReport = true);
 
-public sealed record FdaResult(int Medications, int Files, string Folder, bool Stopped);
+public sealed record FdaResult(int Medications, int Files, string Folder, bool Stopped,
+    ValidationReport? Report = null, string? ReportPath = null);
 
 public static class OpenFda
 {
@@ -241,20 +243,44 @@ public static class OpenFda
         int totalFiles = (int)Math.Ceiling(meds.Count / (double)o.PerFile);
         var opts = new JsonSerializerOptions { WriteIndented = true, IndentSize = 4, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
+        var written = new List<string>();
         for (int i = 0; i < totalFiles; i++)
         {
             var chunk = meds.Skip(i * o.PerFile).Take(o.PerFile).ToList();
             string name = $"medications_{i + 1}_of_{totalFiles}.json";
-            File.WriteAllBytes(Path.Combine(o.OutputFolder, name),
-                JsonSerializer.SerializeToUtf8Bytes(new MedicationsFile { Medications = chunk }, opts));
+            var filePath = Path.Combine(o.OutputFolder, name);
+            File.WriteAllBytes(filePath, JsonSerializer.SerializeToUtf8Bytes(new MedicationsFile { Medications = chunk }, opts));
+            written.Add(filePath);
             log($"Wrote {chunk.Count} medications to {name}");
             progress(75 + (i + 1) * 25 / totalFiles, $"Writing file {i + 1} of {totalFiles}");
         }
+
+        log("Verifying the output files...");
+        var report = new ValidationReport("OpenFDA medications") { Source = o.Endpoint.Url };
+        report.Stat("Endpoint", $"{o.Endpoint.Name} ({o.Endpoint.Format})");
+        report.Stat("Medications requested", o.RecordCount);
+        if (stopped) report.Add(Severity.Warning, "Completeness", "The run was stopped early, so fewer medications than requested were collected.");
+        else if (meds.Count < o.RecordCount && !o.RemoveDuplicates)
+            report.Add(Severity.Warning, "Completeness", $"Only {meds.Count:N0} of {o.RecordCount:N0} requested medications were collected (the API ran out of results or some records had no usable name).");
+        MedicationValidator.Verify(written, meds.Count, o.PerFile, o.RemoveDuplicates, report);
+
+        string? reportPath = null;
+        if (o.WriteReport)
+        {
+            try
+            {
+                reportPath = Path.Combine(o.OutputFolder, "medications-validation-report.txt");
+                report.Save(reportPath);
+            }
+            catch (Exception ex) { log("Could not write the validation report: " + ex.Message); reportPath = null; }
+        }
+        report.LogSummary(log);
+        if (reportPath != null) log($"Validation report: {reportPath}");
 
         progress(100, "Done!");
         log("=========================================");
         log($"Finished - {meds.Count} medications across {totalFiles} file(s)");
         log($"Output : {o.OutputFolder}");
-        return new FdaResult(meds.Count, totalFiles, o.OutputFolder, stopped);
+        return new FdaResult(meds.Count, totalFiles, o.OutputFolder, stopped, report, reportPath);
     }
 }
