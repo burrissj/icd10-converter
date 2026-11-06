@@ -62,7 +62,7 @@ public sealed class ValidationReport
         if (info.Count > 0 || Stats.Count > 0)
         {
             sb.AppendLine().AppendLine("Details").AppendLine(new string('-', 20));
-            foreach (var (label, value) in Stats) sb.AppendLine($"  {label,-34}{value}");
+            foreach (var (label, value) in Stats) sb.AppendLine($"  {label,-40}{value}");
             foreach (var f in info) sb.AppendLine($"  [{f.Check}] {f.Message}");
         }
         foreach (var t in Tables) sb.AppendLine().Append(t);
@@ -91,8 +91,9 @@ public sealed class ValidationReport
 /// <summary>Checks on the ICD-10 code set and on the generated JSON files.</summary>
 public static class IcdValidator
 {
-    // ICD-10-CM: letter, digit, alphanumeric, then an optional '.' with 1-4 alphanumerics.
-    static readonly Regex CodeRx = new(@"^[A-Z][0-9][0-9A-Z](\.[0-9A-Z]{1,4})?$", RegexOptions.Compiled);
+    // ICD-10-CM: a letter, then two alphanumerics (FY2027 added categories such as QA0 with a letter in
+    // position 2), then an optional '.' with 1-4 alphanumerics.
+    static readonly Regex CodeRx = new(@"^[A-Z][0-9A-Z][0-9A-Z](\.[0-9A-Z]{1,4})?$", RegexOptions.Compiled);
 
     static string? Str(JsonElement e, string name) =>
         e.ValueKind == JsonValueKind.Object && e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String

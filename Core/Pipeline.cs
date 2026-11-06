@@ -30,11 +30,21 @@ public static class Pipeline
             log($"Applying addenda: {o.Addenda}");
             var addenda = IcdParser.ReadAddenda(o.Addenda, issues);
             int before = codes.Count;
-            codes = IcdParser.ApplyAddenda(codes, addenda, issues, out var added, out var modified, out var deleted);
+            codes = IcdParser.ApplyAddenda(codes, addenda, issues,
+                out var added, out var modified, out var deleted, out var alreadyPresent, out var alreadyAbsent);
             log($"Addenda applied: {added} added, {modified} modified, {deleted} deleted -> {codes.Count:N0} codes");
             report.Stat("Addenda file", Path.GetFileName(o.Addenda));
             report.Stat("Addenda: added / modified / deleted", $"{added} / {modified} / {deleted}");
+            report.Stat("Addenda already reflected in codes", alreadyPresent + alreadyAbsent);
             report.Stat("Codes before addenda", before);
+            if (alreadyPresent + alreadyAbsent > 0)
+            {
+                string note = $"{alreadyPresent:N0} addition/revision line(s) were already present and {alreadyAbsent:N0} deletion(s) were already absent in the codes file.";
+                if (added + modified + deleted == 0)
+                    note += " This addenda is already included in the codes file (CMS addenda describe the change from the previous year), so applying it changed nothing.";
+                log("  " + note);
+                report.Add(Severity.Info, "Addenda", note);
+            }
         }
 
         if (issues.Count > 0)

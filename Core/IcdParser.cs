@@ -22,13 +22,17 @@ public sealed class Addenda
 {
     public List<string> ToDelete { get; } = new();
     public Dictionary<string, string> ToAdd { get; } = new(StringComparer.Ordinal);
+    /// <summary>"Revise to:" lines: new description for an existing code.</summary>
+    public Dictionary<string, string> ToRevise { get; } = new(StringComparer.Ordinal);
 }
 
 public static class IcdParser
 {
     static readonly Regex OrderRx = new(@"^(\d+)\s+(\S+)\s+(\d+)\s+(.+)$", RegexOptions.Compiled);
     static readonly Regex OrderSplitRx = new(@"^(.+?)\s{2,}(.+)$", RegexOptions.Compiled);
-    static readonly Regex AddendaRx = new(@"^(Delete|Add):\s+(\S+)\s+(.+)$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    static readonly Regex AddendaRx = new(@"^(Delete|Add|Revise from|Revise to):\s+(\S+)\s+(.+)$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    // Summary lines at the end of CMS addenda files, e.g. "Codes", "74879 codes in icd10cm_order_2027.txt", "190 additions".
+    static readonly Regex AddendaFooterRx = new(@"^(Codes|\d+\s+(codes\b.*|additions|deletions|revisions))$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     public static bool LooksLikeOrder(string path) =>
         Path.GetFileName(path).Contains("order", StringComparison.OrdinalIgnoreCase);
@@ -154,34 +158,43 @@ public static class IcdParser
             var m = AddendaRx.Match(line);
             if (!m.Success)
             {
-                issues.Add($"Unable to parse addenda line {i + 1}: {line}");
+                if (!AddendaFooterRx.IsMatch(line)) issues.Add($"Unable to parse addenda line {i + 1}: {line}");
                 continue;
             }
             var code = NormalizeCode(m.Groups[2].Value);
-            if (m.Groups[1].Value.Equals("Delete", StringComparison.OrdinalIgnoreCase))
-                result.ToDelete.Add(code);
-            else
-                result.ToAdd[code] = m.Groups[3].Value.Trim();
+            var action = m.Groups[1].Value;
+            if (action.Equals("Delete", StringComparison.OrdinalIgnoreCase)) result.ToDelete.Add(code);
+            else if (action.Equals("Add", StringComparison.OrdinalIgnoreCase)) result.ToAdd[code] = m.Groups[3].Value.Trim();
+            else if (action.Equals("Revise to", StringComparison.OrdinalIgnoreCase)) result.ToRevise[code] = m.Groups[3].Value.Trim();
+            // "Revise from" only documents the old text; nothing to apply.
         }
         return result;
     }
 
     public static Dictionary<string, string> ApplyAddenda(
         Dictionary<string, string> codes, Addenda addenda, Issues issues,
-        out int added, out int modified, out int deleted)
+        out int added, out int modified, out int deleted, out int alreadyPresent, out int alreadyAbsent)
     {
         var updated = new Dictionary<string, string>(codes, StringComparer.Ordinal);
-        added = modified = deleted = 0;
+        added = modified = deleted = alreadyPresent = alreadyAbsent = 0;
 
+        // A same-year codes file already contains its own addenda, so deletions of codes that are
+        // absent and additions of codes that are present with the same text are counted, not warned about.
         foreach (var code in addenda.ToDelete)
         {
-            if (updated.Remove(code)) deleted++;
-            else issues.Add($"Code marked for deletion not found: {code}");
+            if (updated.Remove(code)) deleted++; else alreadyAbsent++;
         }
         foreach (var (code, desc) in addenda.ToAdd)
         {
-            if (updated.ContainsKey(code)) modified++; else added++;
-            updated[code] = desc;
+            if (!updated.TryGetValue(code, out var existing)) { added++; updated[code] = desc; }
+            else if (existing != desc) { modified++; updated[code] = desc; }
+            else alreadyPresent++;
+        }
+        foreach (var (code, desc) in addenda.ToRevise)
+        {
+            if (!updated.TryGetValue(code, out var existing)) issues.Add($"Revision for a code that is not in the file: {code}");
+            else if (existing != desc) { modified++; updated[code] = desc; }
+            else alreadyPresent++;
         }
         return updated;
     }
