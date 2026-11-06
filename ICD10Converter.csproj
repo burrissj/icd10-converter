@@ -9,7 +9,7 @@
     <AssemblyName>ICD10Converter</AssemblyName>
     <RootNamespace>ICD10Converter</RootNamespace>
     <ApplicationIcon>app.ico</ApplicationIcon>
-    <Version>2.0.0</Version>
+    <Version>2.1.0</Version>
     <Product>ICD-10 Converter</Product>
     <Copyright>Copyright (c) 2026 burrissj</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
